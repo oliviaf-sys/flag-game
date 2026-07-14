@@ -1,93 +1,72 @@
-// ===============================
+// =====================================
 // CAPTURE THE FLAG ARENA
-// PART 1 - ENGINE + MAP + PLAYER
-// ===============================
+// PART 1 - CORE ENGINE + PLAYER + MAP
+// =====================================
 
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-
-canvas.width = 1100;
+canvas.width = 1200;
 canvas.height = 700;
 
 
-
-// ===============================
-// GAME STATE
-// ===============================
-
-const game = {
-
-    blueScore:0,
-    redScore:0,
-
-    particles:[],
-
-    running:true
-
-};
-
-
-
-// ===============================
+// =============================
 // INPUT
-// ===============================
+// =============================
 
 const keys = {};
 
 const mouse = {
-
-    x:550,
+    x:600,
     y:350,
     down:false
-
 };
 
 
+window.addEventListener("keydown", e => {
 
-document.addEventListener("keydown", e=>{
+    keys[e.code] = true;
 
-    keys[e.key.toLowerCase()] = true;
-
-    if(["w","a","s","d"," "].includes(e.key.toLowerCase()))
+    if(
+        [
+            "KeyW",
+            "KeyA",
+            "KeyS",
+            "KeyD",
+            "Space"
+        ].includes(e.code)
+    ){
         e.preventDefault();
+    }
 
 });
 
 
-document.addEventListener("keyup",e=>{
+window.addEventListener("keyup", e => {
 
-    keys[e.key.toLowerCase()] = false;
+    keys[e.code] = false;
 
 });
 
 
 
-canvas.addEventListener("mousemove",e=>{
+canvas.addEventListener("mousemove", e => {
 
     const rect = canvas.getBoundingClientRect();
 
     mouse.x =
         (e.clientX - rect.left)
         *
-        (canvas.width / rect.width);
+        canvas.width /
+        rect.width;
 
 
     mouse.y =
         (e.clientY - rect.top)
         *
-        (canvas.height / rect.height);
-
-
-    const cross =
-        document.getElementById("crosshair");
-
-    cross.style.left =
-        e.clientX + "px";
-
-    cross.style.top =
-        e.clientY + "px";
+        canvas.height /
+        rect.height;
 
 });
 
@@ -108,80 +87,90 @@ canvas.addEventListener("mouseup",()=>{
 
 
 
+// =============================
+// GAME DATA
+// =============================
 
 
-// ===============================
+const game = {
+
+    blueScore:0,
+    redScore:0,
+
+    over:false
+
+};
+
+
+
+const bullets=[];
+
+const players=[];
+
+
+
+// =============================
 // MAP
-// ===============================
+// =============================
 
 
 const walls=[
 
-
     {
-        x:520,
+        x:560,
         y:0,
-        w:60,
-        h:210
+        w:80,
+        h:230
     },
 
-
     {
-        x:520,
-        y:490,
-        w:60,
-        h:210
+        x:560,
+        y:470,
+        w:80,
+        h:230
     },
 
-
     {
-        x:310,
-        y:270,
+        x:330,
+        y:300,
         w:160,
-        h:55
+        h:60
     },
 
-
     {
-        x:630,
-        y:375,
+        x:710,
+        y:340,
         w:160,
-        h:55
+        h:60
     }
-
 
 ];
 
 
-
 const blueBase={
 
-    x:30,
+    x:40,
     y:270,
-    w:130,
+    w:140,
     h:160
 
 };
-
 
 
 const redBase={
 
-    x:940,
+    x:1020,
     y:270,
-    w:130,
+    w:140,
     h:160
 
 };
 
 
 
-
-
-
-// ===============================
+// =============================
 // UTILITIES
-// ===============================
+// =============================
 
 
 function distance(a,b){
@@ -195,30 +184,17 @@ function distance(a,b){
 
 
 
-function clamp(value,min,max){
-
-    return Math.max(
-        min,
-        Math.min(max,value)
-    );
-
-}
+function blocked(x,y,r){
 
 
-
-
-function hitWall(x,y,size){
-
-
-    for(let w of walls){
-
+    for(const w of walls){
 
         if(
 
-            x+size>w.x &&
-            x-size<w.x+w.w &&
-            y+size>w.y &&
-            y-size<w.y+w.h
+            x+r>w.x &&
+            x-r<w.x+w.w &&
+            y+r>w.y &&
+            y-r<w.y+w.h
 
         ){
 
@@ -236,40 +212,32 @@ function hitWall(x,y,size){
 
 
 
-
-
-// ===============================
-// PLAYER CLASS
-// ===============================
+// =============================
+// CHARACTER
+// =============================
 
 
 class Character{
 
 
-constructor(x,y,team,isPlayer=false){
-
+constructor(x,y,team,player=false){
 
     this.x=x;
     this.y=y;
 
-
     this.team=team;
 
-    this.isPlayer=isPlayer;
+    this.player=player;
 
 
     this.radius=24;
 
 
     this.speed =
-        isPlayer ? 5 : 2.2;
-
+        player ? 5 : 2.3;
 
 
     this.health=100;
-
-
-    this.maxHealth=100;
 
 
     this.cooldown=0;
@@ -278,17 +246,7 @@ constructor(x,y,team,isPlayer=false){
     this.angle=0;
 
 
-    this.alive=true;
-
-
-
-    this.name =
-        isPlayer ?
-        "YOU" :
-        team==="blue" ?
-        "BLUE BOT" :
-        "RED BOT";
-
+    this.carrying=null;
 
 }
 
@@ -298,40 +256,33 @@ move(dx,dy){
 
 
     let length =
-        Math.hypot(dx,dy)||1;
+        Math.hypot(dx,dy);
+
+
+    if(length===0)
+        return;
 
 
     dx/=length;
     dy/=length;
 
 
-
     let nx =
-        this.x + dx*this.speed;
+        this.x+
+        dx*this.speed;
 
 
     let ny =
-        this.y + dy*this.speed;
+        this.y+
+        dy*this.speed;
 
 
 
-    if(!hitWall(nx,ny,this.radius)){
+    if(!blocked(nx,ny,this.radius)){
 
 
-        this.x =
-        clamp(
-            nx,
-            this.radius,
-            canvas.width-this.radius
-        );
-
-
-        this.y =
-        clamp(
-            ny,
-            this.radius,
-            canvas.height-this.radius
-        );
+        this.x=nx;
+        this.y=ny;
 
     }
 
@@ -348,23 +299,20 @@ update(){
 
 
 
-    if(this.isPlayer){
+    if(this.player){
 
 
         let dx=0;
         let dy=0;
 
 
-
-        if(keys.w) dy--;
-        if(keys.s) dy++;
-        if(keys.a) dx--;
-        if(keys.d) dx++;
-
+        if(keys.KeyW)dy--;
+        if(keys.KeyS)dy++;
+        if(keys.KeyA)dx--;
+        if(keys.KeyD)dx++;
 
 
         this.move(dx,dy);
-
 
 
         this.angle =
@@ -373,12 +321,10 @@ update(){
                 mouse.x-this.x
             );
 
-
     }
 
 
 }
-
 
 
 
@@ -393,8 +339,8 @@ draw(){
 
     ctx.ellipse(
         this.x,
-        this.y+18,
-        25,
+        this.y+22,
+        28,
         10,
         0,
         0,
@@ -405,16 +351,14 @@ draw(){
 
 
 
-
     // body
 
     ctx.fillStyle =
         this.team==="blue"
         ?
-        "#008cff"
+        "#009cff"
         :
         "#ff3333";
-
 
 
     ctx.beginPath();
@@ -431,9 +375,7 @@ draw(){
 
 
 
-    // player outline
-
-    if(this.isPlayer){
+    if(this.player){
 
         ctx.strokeStyle="white";
 
@@ -444,8 +386,7 @@ draw(){
     }
 
 
-
-    // health bar
+    // health
 
     ctx.fillStyle="black";
 
@@ -457,15 +398,14 @@ draw(){
     );
 
 
-    ctx.fillStyle="#35ff55";
+    ctx.fillStyle="#44ff44";
 
     ctx.fillRect(
         this.x-25,
         this.y-38,
-        50*(this.health/this.maxHealth),
+        50*this.health/100,
         7
     );
-
 
 
     // direction
@@ -479,19 +419,16 @@ draw(){
         this.y
     );
 
-
     ctx.lineTo(
         this.x+
         Math.cos(this.angle)*35,
+
         this.y+
         Math.sin(this.angle)*35
     );
 
-
     ctx.stroke();
 
-
-
 }
 
 
@@ -500,12 +437,13 @@ draw(){
 
 
 
-// ===============================
+// =============================
 // CREATE PLAYER
-// ===============================
+// =============================
 
 
-const player = new Character(
+const player =
+new Character(
     220,
     350,
     "blue",
@@ -513,96 +451,15 @@ const player = new Character(
 );
 
 
-const characters=[player];
-// ===============================
-// PART 2 - COMBAT + NPC AI
-// ===============================
+players.push(player);// =====================================
+// PART 2 - COMBAT + BOTS
+// =====================================
 
 
 
-const bullets=[];
-
-
-
-// ===============================
-// PARTICLES
-// ===============================
-
-
-class Particle{
-
-
-constructor(x,y,color){
-
-
-    this.x=x;
-    this.y=y;
-
-    this.size=
-        Math.random()*5+2;
-
-
-    this.color=color;
-
-
-    this.life=30;
-
-
-    this.dx=
-        (Math.random()-0.5)*6;
-
-
-    this.dy=
-        (Math.random()-0.5)*6;
-
-
-}
-
-
-
-update(){
-
-    this.x+=this.dx;
-    this.y+=this.dy;
-
-    this.life--;
-
-}
-
-
-
-draw(){
-
-    ctx.globalAlpha=
-        this.life/30;
-
-
-    ctx.fillStyle=this.color;
-
-
-    ctx.fillRect(
-        this.x,
-        this.y,
-        this.size,
-        this.size
-    );
-
-
-    ctx.globalAlpha=1;
-
-}
-
-
-}
-
-
-
-
-
-
-// ===============================
+// =============================
 // SHOOTING
-// ===============================
+// =============================
 
 
 function shoot(unit,target){
@@ -613,10 +470,11 @@ function shoot(unit,target){
 
 
 
-    let angle=Math.atan2(
-        target.y-unit.y,
-        target.x-unit.x
-    );
+    const angle =
+        Math.atan2(
+            target.y-unit.y,
+            target.x-unit.x
+        );
 
 
 
@@ -638,25 +496,33 @@ function shoot(unit,target){
 
     unit.cooldown=18;
 
+}
 
 
-    // muzzle flash
 
-    for(let i=0;i<6;i++){
 
-        game.particles.push(
 
-            new Particle(
-                unit.x+
-                Math.cos(angle)*25,
 
-                unit.y+
-                Math.sin(angle)*25,
 
-                "#ffff00"
-            )
+// =============================
+// PLAYER SHOOTING
+// =============================
 
+
+function handlePlayerShoot(){
+
+
+    if(mouse.down){
+
+
+        shoot(
+            player,
+            {
+                x:mouse.x,
+                y:mouse.y
+            }
         );
+
 
     }
 
@@ -668,22 +534,10 @@ function shoot(unit,target){
 
 
 
-canvas.addEventListener("mousedown",()=>{
 
-
-    mouse.down=true;
-
-
-});
-
-
-
-
-
-
-// ===============================
-// NPC AI
-// ===============================
+// =============================
+// BOT CLASS
+// =============================
 
 
 class Bot extends Character{
@@ -695,13 +549,14 @@ constructor(x,y,team){
     super(x,y,team,false);
 
 
-    this.speed=2.1;
-
+    this.speed=2.2;
 
     this.target=null;
 
 
 }
+
+
 
 
 
@@ -712,71 +567,73 @@ update(){
 
 
 
-    let enemies =
-        characters.filter(
-            c=>c.team!==this.team
-        );
+    let enemy=null;
+
+    let closest=99999;
 
 
 
-    let closest=null;
-    let shortest=9999;
+    for(const p of players){
+
+
+        if(p.team!==this.team){
+
+
+            const d=
+            distance(this,p);
 
 
 
-    for(let e of enemies){
+            if(d<closest){
 
+                closest=d;
+                enemy=p;
 
-        let d=
-            distance(this,e);
+            }
 
-
-        if(d<shortest){
-
-            shortest=d;
-            closest=e;
 
         }
+
 
     }
 
 
 
-    this.target=closest;
+    this.target=enemy;
 
 
 
-    if(this.target){
+    if(enemy){
 
 
-        let d=
-            distance(
-                this,
-                this.target
+
+        this.angle =
+            Math.atan2(
+                enemy.y-this.y,
+                enemy.x-this.x
             );
 
 
 
-        if(d<350){
+        if(closest<350){
 
             shoot(
                 this,
-                this.target
+                enemy
             );
 
         }
 
 
 
-        if(d>130){
+        if(closest>130){
+
 
             this.move(
-
-                this.target.x-this.x,
-
-                this.target.y-this.y
-
+                enemy.x-this.x,
+                enemy.y-this.y
             );
+
 
         }
 
@@ -785,17 +642,6 @@ update(){
 
 
 
-    this.angle =
-        this.target ?
-        Math.atan2(
-            this.target.y-this.y,
-            this.target.x-this.x
-        )
-        :
-        0;
-
-
-
 }
 
 
@@ -807,45 +653,35 @@ update(){
 
 
 
-// ===============================
-// CREATE TEAMS
-// ===============================
+// =============================
+// CREATE BOTS
+// =============================
 
 
-function createBots(){
-
+function spawnBots(){
 
 
     for(let i=0;i<4;i++){
 
 
-
-        characters.push(
+        players.push(
 
             new Bot(
-
-                260,
-
-                130+i*100,
-
+                280,
+                150+i*110,
                 "blue"
-
             )
 
         );
 
 
 
-        characters.push(
+        players.push(
 
             new Bot(
-
-                840,
-
-                130+i*100,
-
+                920,
+                150+i*110,
                 "red"
-
             )
 
         );
@@ -858,16 +694,17 @@ function createBots(){
 
 
 
-createBots();
+spawnBots();
 
 
 
 
 
 
-// ===============================
-// BULLET UPDATE
-// ===============================
+
+// =============================
+// BULLET SYSTEM
+// =============================
 
 
 function updateBullets(){
@@ -885,18 +722,22 @@ function updateBullets(){
         let b=bullets[i];
 
 
+
         b.x+=b.dx;
 
         b.y+=b.dy;
 
 
 
+        // remove outside map
 
         if(
+
             b.x<0 ||
             b.x>canvas.width ||
             b.y<0 ||
             b.y>canvas.height
+
         ){
 
             bullets.splice(i,1);
@@ -909,34 +750,19 @@ function updateBullets(){
 
 
 
-        for(let c of characters){
+        for(const p of players){
 
 
 
             if(
-                c.team!==b.team &&
-                distance(b,c)<c.radius
+
+                p.team!==b.team &&
+                distance(b,p)<p.radius
+
             ){
 
 
-
-                c.health-=b.damage;
-
-
-
-                for(let p=0;p<10;p++){
-
-                    game.particles.push(
-
-                        new Particle(
-                            c.x,
-                            c.y,
-                            "#ff4444"
-                        )
-
-                    );
-
-                }
+                p.health-=b.damage;
 
 
 
@@ -944,30 +770,13 @@ function updateBullets(){
 
 
 
-
-                if(c.health<=0){
-
-
-                    c.health=100;
+                if(p.health<=0){
 
 
-
-                    if(c.team==="blue"){
-
-                        c.x=220;
-                        c.y=350;
-
-                    }
-                    else{
-
-                        c.x=880;
-                        c.y=350;
-
-                    }
+                    respawn(p);
 
 
                 }
-
 
 
                 break;
@@ -982,42 +791,33 @@ function updateBullets(){
     }
 
 
-
 }
 
 
 
 
 
-
-// ===============================
-// UPDATE PARTICLES
-// ===============================
-
-
-function updateParticles(){
-
-
-    for(
-        let i=game.particles.length-1;
-        i>=0;
-        i--
-    ){
-
-
-        let p=
-            game.particles[i];
-
-
-        p.update();
+function respawn(p){
 
 
 
-        if(p.life<=0){
+    p.health=100;
 
-            game.particles.splice(i,1);
 
-        }
+
+    if(p.team==="blue"){
+
+
+        p.x=220;
+        p.y=350;
+
+
+    }
+    else{
+
+
+        p.x=980;
+        p.y=350;
 
 
     }
@@ -1030,19 +830,23 @@ function updateParticles(){
 
 
 
-// ===============================
-// DRAW COMBAT
-// ===============================
 
 
-function drawCombat(){
+// =============================
+// DRAW BULLETS
+// =============================
+
+
+function drawBullets(){
 
 
 
-    bullets.forEach(b=>{
+    for(const b of bullets){
+
 
 
         ctx.fillStyle="#ffe600";
+
 
 
         ctx.beginPath();
@@ -1055,37 +859,30 @@ function drawCombat(){
             Math.PI*2
         );
 
+
         ctx.fill();
 
 
-
-    });
-
+    }
 
 
-    game.particles.forEach(
-        p=>p.draw()
-    );
+}// =====================================
+// PART 3 - FLAGS + RENDER + GAME LOOP
+// =====================================
 
 
 
-}
-// ===============================
-// PART 3 - FLAGS + MAP + GAME LOOP
-// ===============================
-
-
-// ===============================
+// =============================
 // FLAGS
-// ===============================
+// =============================
 
 
 const blueFlag = {
 
-    x:100,
+    x:110,
     y:350,
 
-    homeX:100,
+    homeX:110,
     homeY:350,
 
     team:"blue",
@@ -1097,10 +894,10 @@ const blueFlag = {
 
 const redFlag = {
 
-    x:1000,
+    x:1090,
     y:350,
 
-    homeX:1000,
+    homeX:1090,
     homeY:350,
 
     team:"red",
@@ -1108,6 +905,7 @@ const redFlag = {
     carrier:null
 
 };
+
 
 
 
@@ -1129,16 +927,17 @@ function resetFlag(flag){
 
 
 
+
 function updateFlags(){
 
 
 
-    for(let c of characters){
+    for(const p of players){
 
 
 
-        let enemyFlag =
-            c.team==="blue"
+        const enemyFlag =
+            p.team==="blue"
             ?
             redFlag
             :
@@ -1146,8 +945,8 @@ function updateFlags(){
 
 
 
-        let ownBase =
-            c.team==="blue"
+        const ownBase =
+            p.team==="blue"
             ?
             blueBase
             :
@@ -1156,17 +955,31 @@ function updateFlags(){
 
 
 
-        // pick up flag
+        // grab flag
 
         if(
-            !c.carrying &&
-            distance(c,enemyFlag)<35
+            !p.carrying &&
+            distance(p,enemyFlag)<35
         ){
 
 
-            c.carrying=enemyFlag;
+            p.carrying=enemyFlag;
 
-            enemyFlag.carrier=c;
+            enemyFlag.carrier=p;
+
+
+        }
+
+
+
+        // follow carrier
+
+        if(p.carrying){
+
+
+            p.carrying.x=p.x;
+
+            p.carrying.y=p.y;
 
 
         }
@@ -1174,40 +987,24 @@ function updateFlags(){
 
 
 
-
-        // move flag with carrier
-
-        if(c.carrying){
-
-
-            c.carrying.x=c.x;
-
-            c.carrying.y=c.y;
-
-
-        }
-
-
-
-
-
-        // capture
-
+        // score blue
 
         if(
-            c.carrying &&
-            c.team==="blue" &&
-            insideBase(c,blueBase)
+
+            p.team==="blue" &&
+            p.carrying &&
+            insideBase(p,blueBase)
+
         ){
 
 
             game.blueScore++;
 
+            resetFlag(
+                p.carrying
+            );
 
-            resetFlag(c.carrying);
-
-
-            c.carrying=null;
+            p.carrying=null;
 
 
         }
@@ -1215,20 +1012,24 @@ function updateFlags(){
 
 
 
+        // score red
+
         if(
-            c.carrying &&
-            c.team==="red" &&
-            insideBase(c,redBase)
+
+            p.team==="red" &&
+            p.carrying &&
+            insideBase(p,redBase)
+
         ){
 
 
             game.redScore++;
 
+            resetFlag(
+                p.carrying
+            );
 
-            resetFlag(c.carrying);
-
-
-            c.carrying=null;
+            p.carrying=null;
 
 
         }
@@ -1245,15 +1046,16 @@ function updateFlags(){
 
 
 
-function insideBase(unit,base){
+function insideBase(p,base){
 
 
     return(
 
-        unit.x>base.x &&
-        unit.x<base.x+base.w &&
-        unit.y>base.y &&
-        unit.y<base.y+base.h
+        p.x>base.x &&
+        p.x<base.x+base.w &&
+
+        p.y>base.y &&
+        p.y<base.y+base.h
 
     );
 
@@ -1266,18 +1068,19 @@ function insideBase(unit,base){
 
 
 
-// ===============================
+// =============================
 // MAP DRAWING
-// ===============================
+// =============================
 
 
 function drawMap(){
 
 
 
-    // grass
+    // background
 
-    ctx.fillStyle="#143d18";
+
+    ctx.fillStyle="#17451c";
 
     ctx.fillRect(
         0,
@@ -1290,41 +1093,40 @@ function drawMap(){
 
 
 
-    // grid decoration
+    // grass lines
+
 
     ctx.strokeStyle=
-        "rgba(255,255,255,.04)";
+    "rgba(255,255,255,.04)";
 
 
-    for(let x=0;x<canvas.width;x+=50){
+    for(let x=0;x<1200;x+=50){
+
 
         ctx.beginPath();
 
         ctx.moveTo(x,0);
 
-        ctx.lineTo(
-            x,
-            canvas.height
-        );
+        ctx.lineTo(x,700);
 
         ctx.stroke();
+
 
     }
 
 
 
-    for(let y=0;y<canvas.height;y+=50){
+    for(let y=0;y<700;y+=50){
+
 
         ctx.beginPath();
 
         ctx.moveTo(0,y);
 
-        ctx.lineTo(
-            canvas.width,
-            y
-        );
+        ctx.lineTo(1200,y);
 
         ctx.stroke();
+
 
     }
 
@@ -1336,7 +1138,7 @@ function drawMap(){
 
 
     ctx.fillStyle=
-        "rgba(0,130,255,.35)";
+    "rgba(0,150,255,.3)";
 
 
     ctx.fillRect(
@@ -1349,7 +1151,7 @@ function drawMap(){
 
 
     ctx.fillStyle=
-        "rgba(255,30,30,.35)";
+    "rgba(255,50,50,.3)";
 
 
     ctx.fillRect(
@@ -1366,10 +1168,10 @@ function drawMap(){
     // walls
 
 
-    for(let w of walls){
+    for(const w of walls){
 
 
-        ctx.fillStyle="#343434";
+        ctx.fillStyle="#555";
 
 
         ctx.fillRect(
@@ -1380,7 +1182,7 @@ function drawMap(){
         );
 
 
-        ctx.strokeStyle="#777";
+        ctx.strokeStyle="#888";
 
         ctx.strokeRect(
             w.x,
@@ -1393,8 +1195,9 @@ function drawMap(){
     }
 
 
-
 }
+
+
 
 
 
@@ -1404,12 +1207,13 @@ function drawFlag(flag){
 
 
 
-    ctx.strokeStyle=
+    ctx.strokeStyle =
         flag.team==="blue"
         ?
         "#00aaff"
         :
         "#ff3333";
+
 
 
     ctx.lineWidth=5;
@@ -1437,7 +1241,7 @@ function drawFlag(flag){
 
 
 
-    ctx.fillStyle=
+    ctx.fillStyle =
         flag.team==="blue"
         ?
         "#00aaff"
@@ -1478,38 +1282,9 @@ function drawFlag(flag){
 
 
 
-// ===============================
-// PLAYER SHOOTING
-// ===============================
-
-
-function playerShoot(){
-
-
-    if(mouse.down){
-
-        shoot(
-            player,
-            {
-                x:mouse.x,
-                y:mouse.y
-            }
-        );
-
-    }
-
-
-}
-
-
-
-
-
-
-
-// ===============================
+// =============================
 // MAIN DRAW
-// ===============================
+// =============================
 
 
 function draw(){
@@ -1535,13 +1310,11 @@ function draw(){
 
 
 
-    characters.forEach(
-        c=>c.draw()
-    );
+    players.forEach(p=>p.draw());
 
 
 
-    drawCombat();
+    drawBullets();
 
 
 
@@ -1549,15 +1322,45 @@ function draw(){
 
     document.getElementById(
         "blueScore"
-    ).innerText=
+    ).textContent=
         game.blueScore;
 
 
 
     document.getElementById(
         "redScore"
-    ).innerText=
+    ).textContent=
         game.redScore;
+
+
+
+
+
+    if(game.blueScore>=3 ||
+       game.redScore>=3){
+
+
+
+        const msg =
+        document.getElementById("message");
+
+
+        msg.style.display="block";
+
+
+        msg.textContent =
+        game.blueScore>=3
+        ?
+        "🔵 BLUE WINS!"
+        :
+        "🔴 RED WINS!";
+
+
+
+        game.over=true;
+
+
+    }
 
 
 
@@ -1569,36 +1372,31 @@ function draw(){
 
 
 
-
-// ===============================
-// MAIN LOOP
-// ===============================
-
-
-function gameLoop(){
+// =============================
+// GAME LOOP
+// =============================
 
 
+function loop(){
 
-    if(!game.running)
+
+
+    if(game.over)
         return;
 
 
 
-    characters.forEach(
-        c=>c.update()
+    players.forEach(
+        p=>p.update()
     );
 
 
 
-    playerShoot();
+    handlePlayerShoot();
 
 
 
     updateBullets();
-
-
-
-    updateParticles();
 
 
 
@@ -1610,15 +1408,11 @@ function gameLoop(){
 
 
 
-    requestAnimationFrame(
-        gameLoop
-    );
+    requestAnimationFrame(loop);
 
 
 }
 
 
 
-
-
-gameLoop();
+loop();
