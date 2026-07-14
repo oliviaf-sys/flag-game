@@ -1,72 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Capture The Flag Arena</title>
+<title>Capture The Flag Arena</title>
 
-    <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css">
 </head>
 
 
 <body>
 
-    <div id="gameContainer">
-
-        <canvas id="game"></canvas>
+<div id="gameWrapper">
 
 
-        <div id="ui">
-
-            <h1>🏆 Capture The Flag</h1>
-
-            <div id="score">
-                <span class="blue">
-                    🔵 Blue:
-                    <span id="blueScore">0</span>
-                </span>
-
-                <span class="red">
-                    🔴 Red:
-                    <span id="redScore">0</span>
-                </span>
-            </div>
+    <canvas id="game" width="1200" height="700"></canvas>
 
 
-            <div id="status">
-                Fight for the flag!
-            </div>
+    <div id="hud">
 
+        <div class="team blue">
+            🔵 BLUE
+            <span id="blueScore">0</span>
         </div>
 
 
-
-        <div id="help">
-
-            <b>Controls</b><br>
-            🟦 WASD — Move<br>
-            🎯 Mouse — Aim<br>
-            🔫 Click — Shoot<br>
-            🚩 Capture enemy flag
-
+        <div id="title">
+            CAPTURE THE FLAG
         </div>
 
 
-        <div id="crosshair"></div>
-
-
-        <div id="message">
+        <div class="team red">
+            🔴 RED
+            <span id="redScore">0</span>
         </div>
-
 
     </div>
 
 
 
-    <script src="game.js"></script>
+    <div id="controls">
+
+        <b>CONTROLS</b><br>
+        WASD — Move<br>
+        Mouse — Aim<br>
+        Click — Shoot
+
+    </div>
+
+
+
+    <div id="message"></div>
+
+
+</div>
+
+
+
+<script src="game.js"></script>
 
 </body>
-
 </html>
